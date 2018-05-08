@@ -1,0 +1,18 @@
+server:
+  listenAddress: 0.0.0.0:{{.Port}}
+  debugAddress: 0.0.0.0:{{.DebugPort}}
+
+metrics:
+  sampleRate: 0.02
+  m3:
+    hostPort: 127.0.0.1:{{.M3Address}}
+    service: m3em_agent
+    includeHost: true
+    env: production
+
+agent:
+    workingDir: {{.WorkingDir}}
+    startupCmds: []
+    releaseCmds: []
+    testEnvVars:
+      UBER_DATACENTER: sjc1

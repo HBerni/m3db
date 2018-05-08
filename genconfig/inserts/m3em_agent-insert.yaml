@@ -1,0 +1,4 @@
+port: 9470
+debug_port: 19470
+m3_address: 127.0.0.2:9052
+working_dir: /var/m3em-agent
