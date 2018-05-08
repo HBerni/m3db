@@ -1,42 +1,56 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"text/template"
 
 	inserts "github.com/m3db/m3db/genconfig/inserts"
-	yaml "gopkg.in/yaml.v2"
 )
 
-type BuildConfigFunc func(string, string) (string, error)
+var insertMap = map[string]inserts.Insert{
+	"m3em_agent": &inserts.M3emAgentInsert{},
+	"m3dbnode":   &inserts.M3DBNodeInsert{},
+	"dtest":      &inserts.DTestInsert{},
+}
 
+type BuildOptions struct {
+	insertFile   string
+	templateFile string
+	outputFile   string
+	insert       inserts.Insert
+}
+
+func NewBuildOptions(service string, i inserts.Insert) BuildOptions {
+	return BuildOptions{
+		insertFile:   insertFilePath(service),
+		templateFile: templateFilePath(service),
+		outputFile:   outputFilePath(service),
+		insert:       i,
+	}
+}
+
+// TODO: instead of using a yaml file, the insert can probably defined at
+// a global level and have default settings per environment
 func main() {
 
-	var inserts = map[string]BuildConfigFunc{
-		"m3em_agent": buildM3EmAgentConfig,
-		"m3dbnode":   buildM3DBNodeConfig,
-		"dtest":      buildDTestConfig,
-	}
-
+	// extract later
 	if _, err := os.Stat("out"); os.IsNotExist(err) {
 		os.Mkdir("out", 0700)
 	}
 	if _, err := os.Stat("out/config"); os.IsNotExist(err) {
 		os.Mkdir("out/config", 0700)
 	}
+
+	// parse args
 	args := os.Args
 	for _, arg := range args {
-		// TODO: this should be passed in as a param instead
-		insertFile := fmt.Sprintf("genconfig/inserts/%s-insert.yaml", arg)
-		templateFile := fmt.Sprintf("genconfig/templates/%s-config.tmpl", arg)
-		if buildFunc, exists := inserts[arg]; exists {
+		if insert, exists := insertMap[arg]; exists {
 			fmt.Println("Building config for", arg)
-			contents, err := buildFunc(insertFile, templateFile)
+			opts := NewBuildOptions(arg, insert)
+			err := buildConfig(opts)
 			if err == nil {
-				fmt.Println(contents)
+				fmt.Println("Successfully generated the config for", arg)
 			} else {
 				fmt.Println("ERROR", err)
 			}
@@ -44,36 +58,33 @@ func main() {
 	}
 }
 
-func buildM3EmAgentConfig(insertFile string, templateFile string) (string, error) {
-	// Parse the insert file to an object
-	insert := &inserts.M3emAgentInsert{}
-	data, err := ioutil.ReadFile(insertFile)
-	if err != nil {
-		return "", err
-	}
-	if err := yaml.Unmarshal(data, insert); err != nil {
-		return "", err
-	}
+func insertFilePath(service string) string {
+	return fmt.Sprintf("genconfig/inserts/%s-insert.yaml", service)
+}
+
+func templateFilePath(service string) string {
+	return fmt.Sprintf("genconfig/templates/%s-config.tmpl", service)
+}
+
+func outputFilePath(service string) string {
+	return fmt.Sprintf("out/config/%s.yaml", service)
+}
+
+func buildConfig(opts BuildOptions) error {
+	// parse insert
+	err := opts.insert.ReadFromFile(opts.insertFile)
 
 	// open output file
-	f, err := os.Create("out/config/m3em_agent.yaml")
+	f, err := os.Create(opts.outputFile)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// Parse the template file to receive the insert
-	t := template.Must(template.ParseFiles(templateFile))
-	err = t.Execute(f, insert)
+	t := template.Must(template.ParseFiles(opts.templateFile))
+	err = t.Execute(f, opts.insert)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return "Success", nil
-}
-
-func buildM3DBNodeConfig(insertFile string, templateFile string) (string, error) {
-	return insertFile, errors.New("Not implemented yet for " + templateFile)
-}
-
-func buildDTestConfig(insertFile string, templateFile string) (string, error) {
-	return insertFile, errors.New("Not implemented yet for " + templateFile)
+	return nil
 }
