@@ -1,5 +1,5 @@
-hash: 460333706d43c189e87457809f4da75ba85ed0eaa1e742cc44279788a149e5fd
-updated: 2018-05-17T01:51:33.577230765-04:00
+hash: 3579afcd74731027e36c69f9aaea88e401d286c4ad01c3643e40424ad157e0e1
+updated: 2018-05-17T03:11:51.467370627-04:00
 imports:
 - name: github.com/alecthomas/template
   version: a0175ee3bccc567396460bf5acd36800cb10c49c
@@ -229,7 +229,7 @@ imports:
   - metric
   - policy
 - name: github.com/m3db/m3ninx
-  version: d5d44ea341add6babe72dd16f91503e9c9db5ad2
+  version: 117dc4292afeab57b315196e9bef3d9641499c9f
   subpackages:
   - doc
   - generated/proto/fswriter
@@ -302,7 +302,7 @@ imports:
 - name: github.com/philhofer/fwd
   version: bb6d471dc95d4fe11e432687f8b70ff496cf3136
 - name: github.com/pilosa/pilosa
-  version: 1ae470514004ce32d84d23cb013a557a989e1fd0
+  version: 74b476707961c325af04d9519fca8a495b137e69
   subpackages:
   - roaring
 - name: github.com/pkg/errors
