@@ -25,8 +25,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m3db/m3cluster/shard"
 	"github.com/m3db/m3db/client"
 	"github.com/m3db/m3db/persist"
+	"github.com/m3db/m3db/sharding"
 	"github.com/m3db/m3db/storage/block"
 	"github.com/m3db/m3db/storage/bootstrap"
 	"github.com/m3db/m3db/storage/bootstrap/result"
@@ -64,12 +66,20 @@ var (
 				SetResultOptions(testDefaultResultOpts)
 )
 
-func newTestDefaultOpts(ctrl *gomock.Controller) Options {
-	return testDefaultOpts.SetAdminClient(newValidMockClient(ctrl))
+func newTestDefaultOpts(t *testing.T, ctrl *gomock.Controller) Options {
+	return testDefaultOpts.SetAdminClient(newValidMockClient(t, ctrl))
 }
 
-func newValidMockClient(ctrl *gomock.Controller) *client.MockAdminClient {
+func newValidMockClient(t *testing.T, ctrl *gomock.Controller) *client.MockAdminClient {
+	shardSet, err := sharding.NewShardSet([]shard.Shard{}, sharding.DefaultHashFn(0))
+	if err != nil {
+		panic(err)
+	}
+
 	mockMap := topology.NewMockMap(ctrl)
+	mockMap.EXPECT().ShardSet().Return(
+		shardSet,
+	).AnyTimes()
 
 	mockTopology := topology.NewMockTopology(ctrl)
 	mockTopology.EXPECT().
@@ -95,7 +105,7 @@ func TestPeersSourceCan(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	src, err := newPeersSource(newTestDefaultOpts(ctrl))
+	src, err := newPeersSource(newTestDefaultOpts(t, ctrl))
 	require.NoError(t, err)
 
 	assert.True(t, src.Can(bootstrap.BootstrapSequential))
@@ -106,7 +116,7 @@ func TestPeersSourceEmptyShardTimeRanges(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	src, err := newPeersSource(newTestDefaultOpts(ctrl))
+	src, err := newPeersSource(newTestDefaultOpts(t, ctrl))
 	require.NoError(t, err)
 	nsMetdata := testNamespaceMetadata(t)
 
@@ -129,7 +139,7 @@ func TestPeersSourceReturnsErrorForAdminSession(t *testing.T) {
 
 	expectedErr := fmt.Errorf("an error")
 
-	mockAdminClient := newValidMockClient(ctrl)
+	mockAdminClient := newValidMockClient(t, ctrl)
 	// mockAdminClient already has one successful DefaultAdminSession() call prepared
 	// for the sake of source construction, so make sure that the subsequent call
 	// (post-construction) will fail.
@@ -178,7 +188,7 @@ func TestPeersSourceReturnsFulfilledAndUnfulfilled(t *testing.T) {
 			uint32(1), start, end, gomock.Any(), client.FetchBlocksMetadataEndpointV1).
 		Return(nil, badErr)
 
-	mockAdminClient := newValidMockClient(ctrl)
+	mockAdminClient := newValidMockClient(t, ctrl)
 	// mockAdminClient already has one successful DefaultAdminSession() call prepared
 	// for the sake of source construction, but subsequent calls will return the session
 	// that returns errors.
@@ -268,7 +278,7 @@ func TestPeersSourceIncrementalRun(t *testing.T) {
 				uint32(1), start.Add(blockSize), start.Add(blockSize*2), gomock.Any(), client.FetchBlocksMetadataEndpointV1).
 			Return(shard1ResultBlock2, nil)
 
-		mockAdminClient := newValidMockClient(ctrl)
+		mockAdminClient := newValidMockClient(t, ctrl)
 		// mockAdminClient already has one successful DefaultAdminSession() call prepared
 		// for the sake of source construction,  but subsequent calls will return the session
 		// that returns errors.
@@ -531,7 +541,7 @@ func TestPeersSourceMarksUnfulfilledOnIncrementalFlushErrors(t *testing.T) {
 			Return(result, nil)
 	}
 
-	mockAdminClient := newValidMockClient(ctrl)
+	mockAdminClient := newValidMockClient(t, ctrl)
 	// mockAdminClient already has one successful DefaultAdminSession() call prepared
 	// for the sake of source construction.
 	mockAdminClient.EXPECT().DefaultAdminSession().Return(mockAdminSession, nil)
