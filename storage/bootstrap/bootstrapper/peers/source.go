@@ -25,7 +25,9 @@ import (
 	"sync"
 	"time"
 
-	clusterShard "github.com/m3db/m3cluster/shard"
+	"github.com/m3db/m3cluster/shard"
+
+	"github.com/m3db/m3cluster/shard"
 	"github.com/m3db/m3db/client"
 	"github.com/m3db/m3db/clock"
 	"github.com/m3db/m3db/persist"
@@ -35,7 +37,6 @@ import (
 	"github.com/m3db/m3db/storage/index/convert"
 	"github.com/m3db/m3db/storage/namespace"
 	"github.com/m3db/m3db/storage/series"
-	"github.com/m3db/m3db/topology"
 	"github.com/m3db/m3x/context"
 	xlog "github.com/m3db/m3x/log"
 	xsync "github.com/m3db/m3x/sync"
@@ -43,10 +44,10 @@ import (
 )
 
 type peersSource struct {
-	initialTopoMap topology.Map
-	opts           Options
-	log            xlog.Logger
-	nowFn          clock.NowFn
+	initialShardStates map[uint32]shard.State
+	opts               Options
+	log                xlog.Logger
+	nowFn              clock.NowFn
 }
 
 type incrementalFlush struct {
@@ -62,16 +63,16 @@ func newPeersSource(opts Options) (bootstrap.Source, error) {
 	// all bootstrap calls (across all namespaces / shards / blocks) so that we
 	// make consistent decisions regarding whether the Peer bootstrapper is able
 	// to fulfill bootstrap requests.
-	initialTopoMap, err := initialTopoMap(opts)
+	initialShardStates, err := initialShardStates(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	return &peersSource{
-		initialTopoMap: initialTopoMap,
-		opts:           opts,
-		log:            opts.ResultOptions().InstrumentOptions().Logger(),
-		nowFn:          opts.ResultOptions().ClockOptions().NowFn(),
+		initialShardStates: initialShardStates,
+		opts:               opts,
+		log:                opts.ResultOptions().InstrumentOptions().Logger(),
+		nowFn:              opts.ResultOptions().ClockOptions().NowFn(),
 	}, nil
 }
 
@@ -88,32 +89,27 @@ func (s *peersSource) AvailableData(
 	shardsTimeRanges result.ShardTimeRanges,
 ) result.ShardTimeRanges {
 	availableShardTimeRanges := result.ShardTimeRanges{}
-	shardSet := s.initialTopoMap.ShardSet()
-	for shard := range shardsTimeRanges {
-		shardState, err := shardSet.LookupStateByID(shard)
-		if err != nil {
-			// TODO: Fix me
-			panic(err)
+	for shardID := range shardsTimeRanges {
+		shardState, ok := s.initialShardStates[shardID]
+		if !ok {
+			continue
 		}
-		// TODO: Switch statement
 		switch shardState {
-		case clusterShard.Leaving:
+		case shard.Leaving:
 			fallthrough
-		case clusterShard.Available:
+		case shard.Available:
 			// Optimistically assume that the peers will be able to provide
 			// all the data. This assumption is safe, as the shard/block ranges
 			// will simply be marked unfulfilled if the peers are not able to
 			// satisfy the requests.
-			availableShardTimeRanges[shard] = shardsTimeRanges[shard]
-		case clusterShard.Initializing:
-			panic("INITIALIZING")
+			availableShardTimeRanges[shardID] = shardsTimeRanges[shardID]
+		case shard.Initializing:
 			continue
-		case clusterShard.Unknown:
-			panic("UNKNOWNs")
+		case shard.Unknown:
 			continue
 		default:
-			// TODO: Fix me
-			panic("wtf")
+			panic(
+				fmt.Sprintf("encountered unknown shard state: %s", shardState.String()))
 		}
 	}
 
@@ -720,7 +716,7 @@ func (s *peersSource) markIndexResultErrorAsUnfulfilled(
 	r.Add(result.IndexBlock{}, unfulfilled)
 }
 
-func initialTopoMap(opts Options) (topology.Map, error) {
+func initialShardStates(opts Options) (map[uint32]shard.State, error) {
 	session, err := opts.AdminClient().DefaultAdminSession()
 	if err != nil {
 		return nil, err
@@ -731,5 +727,13 @@ func initialTopoMap(opts Options) (topology.Map, error) {
 		return nil, err
 	}
 
-	return topology.Get(), nil
+	var (
+		shardSet    = topology.Get().ShardSet()
+		shardStates = map[uint32]shard.State{}
+	)
+	for _, shard := range shardSet.All() {
+		shardStates[shard.ID()] = shard.State()
+	}
+
+	return shardStates, nil
 }
