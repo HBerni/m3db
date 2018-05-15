@@ -27,7 +27,6 @@ import (
 
 	"github.com/m3db/m3cluster/shard"
 
-	"github.com/m3db/m3cluster/shard"
 	"github.com/m3db/m3db/client"
 	"github.com/m3db/m3db/clock"
 	"github.com/m3db/m3db/persist"
@@ -37,6 +36,7 @@ import (
 	"github.com/m3db/m3db/storage/index/convert"
 	"github.com/m3db/m3db/storage/namespace"
 	"github.com/m3db/m3db/storage/series"
+	"github.com/m3db/m3db/topology"
 	"github.com/m3db/m3x/context"
 	xlog "github.com/m3db/m3x/log"
 	xsync "github.com/m3db/m3x/sync"
@@ -44,7 +44,7 @@ import (
 )
 
 type peersSource struct {
-	initialShardStates map[uint32]shard.State
+	initialShardStates shardStates
 	opts               Options
 	log                xlog.Logger
 	nowFn              clock.NowFn
@@ -90,26 +90,38 @@ func (s *peersSource) AvailableData(
 ) result.ShardTimeRanges {
 	availableShardTimeRanges := result.ShardTimeRanges{}
 	for shardID := range shardsTimeRanges {
-		shardState, ok := s.initialShardStates[shardID]
+		hostShardStates, ok := s.initialShardStates[shardID]
 		if !ok {
+			// This shard was not part of the topology when the bootstrapping
+			// process began.
 			continue
 		}
-		switch shardState {
-		case shard.Leaving:
-			fallthrough
-		case shard.Available:
-			// Optimistically assume that the peers will be able to provide
-			// all the data. This assumption is safe, as the shard/block ranges
-			// will simply be marked unfulfilled if the peers are not able to
-			// satisfy the requests.
-			availableShardTimeRanges[shardID] = shardsTimeRanges[shardID]
-		case shard.Initializing:
-			continue
-		case shard.Unknown:
-			continue
-		default:
-			panic(
-				fmt.Sprintf("encountered unknown shard state: %s", shardState.String()))
+
+		for _, hostShardState := range hostShardStates {
+			shardState := hostShardState.shardState
+
+			switch shardState {
+			// Skip cases - We cannot bootstrap from this host
+			case shard.Initializing:
+				// Don't want to peer bootstrap from a node that has not yet completely
+				// taken ownership of the shard.
+			case shard.Unknown:
+
+				// Success cases - We can bootstrap from this host, which is enough to
+				// mark this shard as bootstrappable.
+			case shard.Leaving:
+				fallthrough
+			case shard.Available:
+				// Optimistically assume that the peers will be able to provide
+				// all the data. This assumption is safe, as the shard/block ranges
+				// will simply be marked unfulfilled if the peers are not able to
+				// satisfy the requests.
+				availableShardTimeRanges[shardID] = shardsTimeRanges[shardID]
+				break
+			default:
+				panic(
+					fmt.Sprintf("encountered unknown shard state: %s", shardState.String()))
+			}
 		}
 	}
 
@@ -716,7 +728,7 @@ func (s *peersSource) markIndexResultErrorAsUnfulfilled(
 	r.Add(result.IndexBlock{}, unfulfilled)
 }
 
-func initialShardStates(opts Options) (map[uint32]shard.State, error) {
+func initialShardStates(opts Options) (shardStates, error) {
 	session, err := opts.AdminClient().DefaultAdminSession()
 	if err != nil {
 		return nil, err
@@ -728,12 +740,32 @@ func initialShardStates(opts Options) (map[uint32]shard.State, error) {
 	}
 
 	var (
-		shardSet    = topology.Get().ShardSet()
-		shardStates = map[uint32]shard.State{}
+		topoMap       = topology.Get()
+		hostShardSets = topoMap.HostShardSets()
+		shardStates   = shardStates{}
 	)
-	for _, shard := range shardSet.All() {
-		shardStates[shard.ID()] = shard.State()
+	for _, hostShardSet := range hostShardSets {
+		for _, currShard := range hostShardSet.ShardSet().All() {
+			shardID := currShard.ID()
+			existing, ok := shardStates[shardID]
+			if !ok {
+				existing = map[string]hostShardState{}
+				shardStates[shardID] = existing
+			}
+
+			existing[hostShardSet.Host().String()] = hostShardState{
+				host:       hostShardSet.Host(),
+				shardState: currShard.State(),
+			}
+		}
 	}
 
 	return shardStates, nil
+}
+
+type shardStates map[uint32]map[string]hostShardState
+
+type hostShardState struct {
+	host       topology.Host
+	shardState shard.State
 }
