@@ -71,15 +71,19 @@ func (b *bootstrapProcessProvider) BootstrapperProvider() BootstrapperProvider {
 	return b.bootstrapperProvider
 }
 
-func (b *bootstrapProcessProvider) Provide() Process {
+func (b *bootstrapProcessProvider) Provide() (Process, error) {
 	b.RLock()
 	defer b.RUnlock()
+	bootstrapper, err := b.bootstrapperProvider.Provide()
+	if err != nil {
+		return nil, err
+	}
 	return bootstrapProcess{
 		opts:         b.opts,
 		nowFn:        b.opts.ClockOptions().NowFn(),
 		log:          b.log,
-		bootstrapper: b.bootstrapperProvider.Provide(),
-	}
+		bootstrapper: bootstrapper,
+	}, nil
 }
 
 type bootstrapProcess struct {
