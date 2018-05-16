@@ -28,6 +28,7 @@ import (
 	"github.com/m3db/m3cluster/shard"
 	"github.com/m3db/m3db/client"
 	"github.com/m3db/m3db/persist"
+	m3dbruntime "github.com/m3db/m3db/runtime"
 	"github.com/m3db/m3db/sharding"
 	"github.com/m3db/m3db/storage/block"
 	"github.com/m3db/m3db/storage/bootstrap"
@@ -67,7 +68,9 @@ var (
 )
 
 func newTestDefaultOpts(t *testing.T, ctrl *gomock.Controller) Options {
-	return testDefaultOpts.SetAdminClient(newValidMockClient(t, ctrl))
+	return testDefaultOpts.
+		SetAdminClient(newValidMockClient(t, ctrl)).
+		SetRuntimeOptionsManager(newValidMockRuntimeOptionsManager(t, ctrl))
 }
 
 func newValidMockClient(t *testing.T, ctrl *gomock.Controller) *client.MockAdminClient {
@@ -100,6 +103,24 @@ func newValidMockClient(t *testing.T, ctrl *gomock.Controller) *client.MockAdmin
 		Return(mockAdminSession, nil)
 
 	return mockClient
+}
+
+func newValidMockRuntimeOptionsManager(t *testing.T, ctrl *gomock.Controller) m3dbruntime.OptionsManager {
+	mockRuntimeOpts := m3dbruntime.NewMockOptions(ctrl)
+	mockRuntimeOpts.
+		EXPECT().
+		ClientBootstrapConsistencyLevel().
+		Return(topology.ReadConsistencyLevelAll).
+		AnyTimes()
+
+	mockRuntimeOptsMgr := m3dbruntime.NewMockOptionsManager(ctrl)
+	mockRuntimeOptsMgr.
+		EXPECT().
+		Get().
+		Return(mockRuntimeOpts).
+		AnyTimes()
+
+	return mockRuntimeOptsMgr
 }
 
 type namespaceOption func(namespace.Options) namespace.Options

@@ -27,6 +27,7 @@ import (
 
 	"github.com/m3db/m3db/client"
 	"github.com/m3db/m3db/persist"
+	m3dbruntime "github.com/m3db/m3db/runtime"
 	"github.com/m3db/m3db/storage/block"
 	"github.com/m3db/m3db/storage/bootstrap/result"
 )
@@ -52,6 +53,7 @@ type options struct {
 	persistManager                     persist.Manager
 	blockRetrieverManager              block.DatabaseBlockRetrieverManager
 	fetchBlocksMetadataEndpointVersion client.FetchBlocksMetadataEndpointVersion
+	runtimeOptionsManager              m3dbruntime.OptionsManager
 }
 
 // NewOptions creates new bootstrap options
@@ -156,4 +158,14 @@ func (o *options) SetFetchBlocksMetadataEndpointVersion(value client.FetchBlocks
 
 func (o *options) FetchBlocksMetadataEndpointVersion() client.FetchBlocksMetadataEndpointVersion {
 	return o.fetchBlocksMetadataEndpointVersion
+}
+
+func (o *options) SetRuntimeOptionsManager(value m3dbruntime.OptionsManager) Options {
+	opts := *o
+	opts.runtimeOptionsManager = value
+	return &opts
+}
+
+func (o *options) RuntimeOptionsManager() m3dbruntime.OptionsManager {
+	return o.runtimeOptionsManager
 }

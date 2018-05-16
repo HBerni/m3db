@@ -23,6 +23,7 @@ package peers
 import (
 	"github.com/m3db/m3db/client"
 	"github.com/m3db/m3db/persist"
+	m3dbruntime "github.com/m3db/m3db/runtime"
 	"github.com/m3db/m3db/storage/block"
 	"github.com/m3db/m3db/storage/bootstrap/result"
 )
@@ -95,4 +96,10 @@ type Options interface {
 	// SetFetchBlocksMetadataEndpointVersion returns the version of the fetch blocks
 	// metadata endpoint that the peer bootstrapper will use
 	FetchBlocksMetadataEndpointVersion() client.FetchBlocksMetadataEndpointVersion
+
+	// SetRuntimeOptionsManagers sets the RuntimeOptionsManager.
+	SetRuntimeOptionsManager(value m3dbruntime.OptionsManager) Options
+
+	// RuntimeOptionsManagers returns the RuntimeOptionsManager.
+	RuntimeOptionsManager() m3dbruntime.OptionsManager
 }
