@@ -100,6 +100,8 @@ func (s *localStorage) Fetch(ctx context.Context, query *storage.FetchQuery, opt
 
 		series := ts.NewSeries(ctx, metric.ID, query.Start, values, metric.Tags)
 		seriesList[i] = series
+
+		fmt.Println("read: ", metric.ID, values)
 	}
 
 	return &storage.FetchResult{
@@ -185,6 +187,7 @@ func (w *writeRequest) Process(ctx context.Context) error {
 	common := w.writeRequestCommon
 	store := common.store
 	id := ident.StringID(common.id)
+	fmt.Println("write: ", id, w.timestamp, w.value)
 	return store.session.WriteTagged(store.namespace, id, common.tagIterator, w.timestamp, w.value, common.unit, common.annotation)
 }
 
