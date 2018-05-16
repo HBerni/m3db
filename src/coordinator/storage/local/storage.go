@@ -91,7 +91,7 @@ func (s *localStorage) Fetch(ctx context.Context, query *storage.FetchQuery, opt
 			dp, _, _ := iter.Current()
 			result = append(result, ts.Datapoint{Timestamp: dp.Timestamp, Value: dp.Value})
 			if strings.Contains(metric.ID, "up") {
-				fmt.Println("read: ", metric.ID, dp)
+				fmt.Println("read: ", metric.ID, dp.Value, dp.Timestamp.Unix())
 			}
 		}
 
