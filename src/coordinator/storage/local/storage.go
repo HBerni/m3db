@@ -89,6 +89,7 @@ func (s *localStorage) Fetch(ctx context.Context, query *storage.FetchQuery, opt
 		for iter.Next() {
 			dp, _, _ := iter.Current()
 			result = append(result, ts.Datapoint{Timestamp: dp.Timestamp, Value: dp.Value})
+			fmt.Println("read: ", metric.ID, dp)
 		}
 
 		values := ts.NewValues(ctx, int(s.millisPerStep), len(result))
@@ -101,7 +102,7 @@ func (s *localStorage) Fetch(ctx context.Context, query *storage.FetchQuery, opt
 		series := ts.NewSeries(ctx, metric.ID, query.Start, values, metric.Tags)
 		seriesList[i] = series
 
-		fmt.Println("read: ", metric.ID, values)
+		// fmt.Println("read: ", metric.ID, values.Values())
 	}
 
 	return &storage.FetchResult{
