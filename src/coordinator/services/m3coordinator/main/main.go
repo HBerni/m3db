@@ -54,7 +54,7 @@ import (
 
 var (
 	namespace      = "metrics"
-	resolution     = time.Minute
+	resolution     = 15 * time.Second
 	configLoadOpts = xconfig.Options{
 		DisableUnmarshalStrict: false,
 		DisableValidate:        false,
